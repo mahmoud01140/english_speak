@@ -9,13 +9,12 @@ const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 const app = express();
 const port = 3000;
 app.use(cors());
-app.use(express.static("./public/puterTTS.html"));
 app.use(express.json());
 app.get('/sentences', (req, res) => {
     // __dirname points to the folder where this script lives
     res.sendFile(path.join(__dirname, 'puterTTS.html'));
 });
-app.get('/chat', (req, res) => {
+app.get('/', (req, res) => {
     // __dirname points to the folder where this script lives
     res.sendFile(path.join(__dirname, 'stt.html'));
 });
