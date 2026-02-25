@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puter.js Live Speech-to-Text</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --danger: #e74c3c;
+            --bg: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+
+        #recordBtn {
+            padding: 15px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+            background: var(--primary);
+            color: white;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        #recordBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #recordBtn.recording {
+            background: #333;
+            animation: pulse 1.5s infinite;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            color: var(--primary);
+            height: 20px;
+        }
+
+        #transcript {
+            margin-top: 25px;
+            padding: 20px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            min-height: 120px;
+            text-align: left;
+            background: #fff;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #444;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .ai-msg-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f0f7ff;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 4px solid var(--primary);
+        }
+
+        .btn-speak {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 5px;
+            transition: transform 0.2s;
+            color: var(--primary);
+        }
+
+        .btn-speak:hover {
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>Voice to Text</h2>
+        <p>Powered by Puter.js AI</p>
+
+        <button id="recordBtn" disabled>
+            <span id="btnText">Initializing...</span>
+        </button>
+
+        <div id="status">Connecting to Puter...</div>
+        <div id="transcript">Your transcript will appear here after you finish speaking.</div>
+    </div>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const btnText = document.getElementById('btnText');
+        const transcriptDiv = document.getElementById('transcript');
+        const statusDiv = document.getElementById('status');
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let conversationHistory = []; // Added for memory
+
+
+        // --- STEP 1: Wait for Puter to be ready ---
+        const checkPuter = setInterval(() => {
+            if (typeof puter !== 'undefined') {
+                clearInterval(checkPuter);
+                initApp();
+            }
+        }, 100);
+
+        function initApp() {
+            recordBtn.disabled = false;
+            btnText.innerText = "Start Recording";
+            statusDiv.innerText = "Ready to record";
+            console.log("Puter.js loaded and ready.");
+        }
+
+        // --- STEP 2: Handle Recording Logic ---
+        recordBtn.addEventListener('click', async () => {
+            if (!mediaRecorder || mediaRecorder.state === "inactive") {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // Pick the best MIME type supported by this browser.
+                // audio/mp4 (AAC) tends to work best with Whisper-based APIs.
+                const preferredTypes = [
+                    'audio/mp4',
+                    'audio/webm;codecs=opus',
+                    'audio/webm',
+                    'audio/ogg;codecs=opus',
+                    'audio/ogg'
+                ];
+                const mimeType = preferredTypes.find(t => MediaRecorder.isTypeSupported(t)) || '';
+                console.log("Using MIME type:", mimeType || "(browser default)");
+
+                mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    // Use the recorder's actual mimeType (may differ from what we requested)
+                    const actualMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
+                    const audioBlob = new Blob(audioChunks, { type: actualMime });
+                    console.log("Blob size:", audioBlob.size, "type:", audioBlob.type);
+                    processTranscription(audioBlob);
+
+                    // Stop all mic tracks to release the microphone
+                    stream.getTracks().forEach(t => t.stop());
+                };
+
+                // Request data every second so we don't lose the last chunk
+                mediaRecorder.start(1000);
+                updateUI(true);
+            } catch (err) {
+                statusDiv.innerText = "Microphone access denied.";
+                console.error(err);
+            }
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            updateUI(false);
+        }
+
+        // --- STEP 3: Puter AI Transcription & Chat ---
+        async function processTranscription(blob) {
+            statusDiv.innerText = "Transcribing audio...";
+            transcriptDiv.style.opacity = "0.5";
+
+            try {
+                const result = await puter.ai.speech2txt(blob);
+                const userText = result.text || result;
+
+                // Show new user message
+                const userMsgDiv = document.createElement('div');
+                userMsgDiv.innerHTML = `<strong>You:</strong> ${userText}`;
+                transcriptDiv.appendChild(userMsgDiv);
+
+                statusDiv.innerText = "AI is thinking...";
+
+                // Send to our new chat endpoint with history
+                const response = await fetch('/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: userText,
+                        history: conversationHistory,
+                        provider: 'google'
+                    })
+                });
+
+                const data = await response.json();
+                const aiText = data.response;
+                console.log(aiText)
+                // Show AI response
+                const aiMsgDiv = document.createElement('div');
+                aiMsgDiv.className = 'ai-msg-container';
+                aiMsgDiv.innerHTML = `
+                    <div><strong>AI:</strong> ${aiText}</div>
+                    <button class="btn-speak" title="Listen again">🔊</button>
+                `;
+
+                // Add event listener to the speak button
+                const speakBtn = aiMsgDiv.querySelector('.btn-speak');
+                speakBtn.onclick = () => speakText(aiText);
+
+                transcriptDiv.appendChild(aiMsgDiv);
+                transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+
+                statusDiv.innerText = "AI responded.";
+
+                // Update history
+                conversationHistory.push({ role: 'user', text: userText });
+                conversationHistory.push({ role: 'assistant', text: aiText });
+
+                // Keep history manageable (last 10 messages)
+                if (conversationHistory.length > 20) {
+                    conversationHistory = conversationHistory.slice(-20);
+                }
+
+                // Speak the AI response
+                speakText(aiText);
+
+            } catch (error) {
+                console.error("Error:", error);
+                statusDiv.innerText = "Error: Something went wrong.";
+            } finally {
+                transcriptDiv.style.opacity = "1";
+            }
+        }
+
+
+        // --- STEP 4: Puter TTS helper (from puterTTS.html) ---
+        function speakText(text) {
+            puter.ai.txt2speech(text, {
+                voice: "Joanna",
+                engine: "generative",
+                language: "en-US"
+            })
+                .then((audio) => {
+                    audio.play();
+                })
+                .catch((error) => {
+                    console.error('Puter TTS Error:', error);
+                });
+        }
+
+        function updateUI(isRecording) {
+            if (isRecording) {
+                recordBtn.classList.add('recording');
+                btnText.innerText = "Stop Recording";
+                statusDiv.innerText = "Listening...";
+            } else {
+                recordBtn.classList.remove('recording');
+                btnText.innerText = "Start Recording";
+                statusDiv.innerText = "Processing...";
+            }
+        }
+    </script>
+
+</body>
+
+</html>

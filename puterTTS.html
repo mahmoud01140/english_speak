@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <title>تعلم الإنجليزية مع الذكاء الاصطناعي</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+      background: #f4f4f4;
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .sentence-card {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-speak {
+      cursor: pointer;
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 5px 15px;
+      border-radius: 4px;
+    }
+
+    .loading {
+      color: blue;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h2>مولد جمل اللغة الإنجليزية</h2>
+
+    <div class="input-group">
+      <label>أدخل الكلمة الإنجليزية:</label><br>
+      <input type="text" id="word-input" placeholder="مثلاً: Resilient" style="padding: 8px; width: 200px;">
+
+      <br><br>
+      <label>مزود الذكاء الاصطناعي:</label>
+      <select id="ai-provider">
+        <option value="google">Google Gemini</option>
+        <option value="ollama">Ollama</option>
+      </select>
+
+      <button id="generate-btn"
+        style="padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">توليد
+        الجمل</button>
+    </div>
+
+    <div id="loading-msg" class="loading">جاري طلب الجمل من الذكاء الاصطناعي...</div>
+
+    <div id="results-container">
+    </div>
+  </div>
+
+  <script src="https://js.puter.com/v2/"></script>
+
+  <script>
+    const generateBtn = document.getElementById('generate-btn');
+    const wordInput = document.getElementById('word-input');
+    const providerSelect = document.getElementById('ai-provider');
+    const resultsContainer = document.getElementById('results-container');
+    const loadingMsg = document.getElementById('loading-msg');
+
+    generateBtn.addEventListener('click', async () => {
+      const word = wordInput.value.trim();
+      const provider = providerSelect.value;
+
+      if (!word) {
+        alert("يرجى إدخال كلمة");
+        return;
+      }
+
+      // إظهار رسالة التحميل وتفريغ النتائج القديمة
+      loadingMsg.style.display = 'block';
+      resultsContainer.innerHTML = '';
+
+      try {
+        // 1. طلب البيانات من سيرفر Express الخاص بك
+        const response = await fetch('/ai/sentences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ word, provider })
+        });
+
+        const data = await response.json();
+        loadingMsg.style.display = 'none';
+
+        // 2. عرض الجمل في الصفحة
+        if (data && data.sentences) {
+          data.sentences.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'sentence-card';
+            card.innerHTML = `
+                        <div>
+                            <strong>${item.en}</strong><br>
+                            <small style="color: #666;">${item.ar}</small>
+                        </div>
+                        <button class="btn-speak" onclick="speakText('${item.en.replace(/'/g, "\\'")}')">استماع 🔊</button>
+                    `;
+            resultsContainer.appendChild(card);
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        loadingMsg.innerText = "حدث خطأ في الاتصال بالسيرفر.";
+      }
+    });
+
+    // 3. وظيفة نطق النص باستخدام Puter.js
+    function speakText(text) {
+      puter.ai.txt2speech(text, {
+        voice: "Joanna",
+        engine: "generative",
+        language: "en-US"
+      })
+        .then((audio) => {
+          audio.play();
+        })
+        .catch((error) => {
+          console.error('Puter TTS Error:', error);
+        });
+    }
+  </script>
+
+</body>
+
+</html>
+
+
+
+
+
+
+
+
+<!-- <html>
+<body>
+  <textarea id="text-input" rows="4" cols="50">مرحباً بالعالم! أنا أستخدم ذكاء Puter الاصطناعي.</textarea>
+  <br><br>
+
+  <div>
+    <label>المزود (Provider):</label>
+    <select id="provider">
+      <option value="openai">OpenAI</option>
+      <option value="google">Google</option>
+    </select>
+
+    <br><br>
+    
+    <label>اللغة واللكنة (Language/Accent):</label>
+    <select id="language">
+      <option value="ar-SA">العربية (السعودية)</option>
+      <option value="en-US">English (US)</option>
+      <option value="en-GB">English (UK)</option>
+      <option value="fr-FR">French</option>
+    </select>
+
+    <br><br>
+
+    <label>الجودة (Quality):</label>
+    <select id="speed">
+      <option value="1">عادية (1x)</option>
+      <option value="0.75">بطيئة (0.75x)</option>
+      <option value="1.25">سريعة (1.25x)</option>
+    </select>
+  </div>
+
+  <br>
+  <button id="speak-button" style="padding: 10px 20px;">تحدث الآن</button>
+
+  <script src="https://js.puter.com/v2/"></script>
+
+  <script>
+    document.getElementById('speak-button').addEventListener('click', () => {
+      const text = document.getElementById('text-input').value;
+      
+      // استخراج القيم المحددة من القوائم
+      const selectedProvider = document.getElementById('provider').value;
+      const selectedLanguage = document.getElementById('language').value;
+
+      // تنفيذ الوظيفة مع الإعدادات الجديدة
+      puter.ai.txt2speech(text, {
+          provider: selectedProvider,
+          language: selectedLanguage,
+          // ملاحظة: دعم الأصوات المحددة يعتمد على المزود (Provider)
+          // يمكنك إضافة خيار 'voice' هنا إذا كنت تعرف اسم الصوت المدعوم
+      })
+      .then((audio) => {
+          audio.play();
+      })
+      .catch((error) => {
+          console.error('حدث خطأ:', error);
+          alert('عذراً، حدث خطأ أثناء معالجة الصوت.');
+      });
+    });
+  </script>
+</body>
+</html> -->
